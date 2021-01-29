@@ -3,6 +3,7 @@
 require "rom"
 require "rom-sql"
 
+require_relative "repositories/groups"
 require_relative "repositories/users"
 
 # This module contains all db-related logic
@@ -36,6 +37,7 @@ module Persistence
   class UnknownRepositoryError < StandardError; end
 
   REPOSITORIES = {
+    groups: Repositories::Groups,
     users: Repositories::Users
   }.freeze
 
