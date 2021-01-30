@@ -4,6 +4,7 @@ require "rom"
 require "rom-sql"
 
 require_relative "repositories/groups"
+require_relative "repositories/past_pairs"
 require_relative "repositories/users"
 
 # This module contains all db-related logic
@@ -38,6 +39,7 @@ module Persistence
 
   REPOSITORIES = {
     groups: Repositories::Groups,
+    past_pairs: Repositories::PastPairs,
     users: Repositories::Users
   }.freeze
 

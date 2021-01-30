@@ -2,6 +2,8 @@
 
 # This class draws coffee pairs and if successful sends them over slack
 class DrawCoffeePairsService
+  class RecentlyDrawnError < StandardError; end
+
   def draw
     groups_and_members = Persistence.repository(:groups).all_groups_and_members
     pairs = get_pairs(groups_and_members)
@@ -15,6 +17,10 @@ class DrawCoffeePairsService
     end
 
     web_client.chat_postMessage(text: message, channel: slack_channel, link_names: true, as_user: true)
+    Persistence.repository(:past_pairs).create(created_at: Time.now, complete_draw: pairs.map { |arr| arr.map(&:slack_id).sort })
+  rescue RecentlyDrawnError => e
+    CoffeeBot.logger.debug { e.message }
+    retry
   end
 
   private
@@ -30,7 +36,9 @@ class DrawCoffeePairsService
 
         if members_left(groups_and_members) == 1
           pairs[-1] << groups_and_members[0][:users][0]
-          puts "Actually, pair! #{pairs[-1][0].name}, #{pairs[-1][1].name}, #{pairs[-1][2].name}"
+          raise RecentlyDrawnError, "This pair was drawn in the last three weeks! #{pairs[-1].map(&:name).join(", ")}" if recently_drawn.include? pairs[-1].map(&:slack_id).sort
+
+          CoffeeBot.logger.debug { "Actually, pair! #{pairs[-1][0].name}, #{pairs[-1][1].name}, #{pairs[-1][2].name}" }
           break
         end
 
@@ -45,7 +53,10 @@ class DrawCoffeePairsService
 
         second_member = group2[:users].sample
         group2[:users].delete(second_member)
+        raise RecentlyDrawnError, "This pair was drawn in the last three weeks! #{[first_member, second_member].map(&:name).join(", ")}" if recently_drawn.include? [first_member.slack_id, second_member.slack_id].sort
+
         pairs << [first_member, second_member]
+        CoffeeBot.logger.debug { "Pair! #{first_member.name}, #{second_member.name}" }
 
         groups_and_members.delete(group) if group[:users].empty?
         groups_and_members.delete(group2) if group2[:users].empty?
@@ -64,5 +75,9 @@ class DrawCoffeePairsService
 
     def web_client
       @web_client ||= Slack::Web::Client.new(token: ENV["SLACK_API_TOKEN"])
+    end
+
+    def recently_drawn
+      @recently_drawn ||= Persistence.repository(:past_pairs).last_draws.map(&:complete_draw).flatten(1).uniq
     end
 end
